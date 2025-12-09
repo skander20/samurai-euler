@@ -1,0 +1,12 @@
+name: samurai-euler-env
+channels:
+  - conda-forge
+dependencies:
+  - samurai
+  - cxx-compiler
+  - mpi
+  - libboost-mpi
+  - hdf5 * mpi_*
+  - cmake
+  - h5py
+  - matplotlib
