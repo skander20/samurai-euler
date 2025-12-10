@@ -6,6 +6,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
+set(SAMURAI_WITH_MPI ON)
 find_package(samurai REQUIRED)
 
 add_executable(euler_1d main_1d.cpp)

@@ -97,7 +97,7 @@ int main(int argc, char* argv[])
     std::size_t max_level = 8;
 
     double Tf  = .25;
-    double cfl = 0.4;
+    double cfl = 0.9;
     double t   = 0.;
     std::string restart_file;
     std::string scheme    = "hllc";
@@ -139,6 +139,7 @@ int main(int argc, char* argv[])
     if (restart_file.empty())
     {
         int jump = 0;
+        std::cout << "jump: " << jump << std::endl;
         if (min_level == max_level)
         {
             mesh = {box, min_level, max_level};

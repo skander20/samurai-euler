@@ -5,6 +5,9 @@
 
 #include <type_traits>
 
+#include <boost/mpi.hpp>
+namespace mpi = boost::mpi;
+
 #include <samurai/algorithm.hpp>
 
 #include "variables.hpp"
@@ -27,5 +30,9 @@ auto get_max_lambda(const auto& u)
                                    res = std::max(std::abs(prim.v[d]) + c, res);
                                }
                            });
-    return res;
+
+    double global_res;
+    mpi::communicator world;
+    mpi::all_reduce(world, res, global_res, mpi::maximum<double>());
+    return global_res;
 }

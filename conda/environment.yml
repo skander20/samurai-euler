@@ -6,6 +6,8 @@ dependencies:
   - cxx-compiler
   - mpi
   - libboost-mpi
+  - libboost-devel
+  - mpich
   - hdf5 * mpi_*
   - cmake
   - h5py
