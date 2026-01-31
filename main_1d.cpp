@@ -60,17 +60,12 @@ void init(auto& u)
 int main(int argc, char* argv[])
 {
     constexpr std::size_t dim = 1;
-    using Config              = samurai::MRConfig<dim>;
 
     auto& app = samurai::initialize("Euler equations solver", argc, argv);
 
     // Simulation parameters
     xt::xtensor_fixed<double, xt::xshape<dim>> min_corner = {0.};
     xt::xtensor_fixed<double, xt::xshape<dim>> max_corner = {1.};
-
-    // Multiresolution parameters
-    std::size_t min_level = 10;
-    std::size_t max_level = 10;
 
     double Tf  = .15;
     double cfl = 0.4;
@@ -93,8 +88,6 @@ int main(int argc, char* argv[])
         ->check(CLI::IsMember({"rusanov", "hll", "hllc"}))
         ->group("Simulation parameters");
     app.add_option("--restart-file", restart_file, "Restart file")->capture_default_str()->group("Simulation parameters");
-    app.add_option("--min-level", min_level, "Minimum level of the multiresolution")->capture_default_str()->group("Multiresolution");
-    app.add_option("--max-level", max_level, "Maximum level of the multiresolution")->capture_default_str()->group("Multiresolution");
     app.add_option("--path", path, "Output path")->capture_default_str()->group("Output");
     app.add_option("--filename", filename, "File name prefix")->capture_default_str()->group("Output");
     app.add_option("--nfiles", nfiles, "Number of output files")->capture_default_str()->group("Output");
@@ -103,19 +96,23 @@ int main(int argc, char* argv[])
 
     // Initialize the mesh
     const samurai::Box<double, dim> box(min_corner, max_corner);
+    auto config = samurai::mesh_config<dim>().min_level(8).max_level(8).max_stencil_size(2).disable_minimal_ghost_width();
+    config.parse_args();
 
-    samurai::MRMesh<Config> mesh;
-    auto u = samurai::make_vector_field<double, 2 + dim>("euler", mesh);
+    auto mesh = samurai::mra::make_empty_mesh(config);
+    auto u    = samurai::make_vector_field<double, 2 + dim>("euler", mesh);
 
     if (restart_file.empty())
     {
-        mesh = {box, min_level, max_level};
+        mesh = samurai::mra::make_mesh(box, config);
         init(u);
     }
     else
     {
         samurai::load(restart_file, mesh, u);
     }
+
+    std::cout << config.min_level() << " " << config.max_level() << std::endl;
 
     const xt::xtensor_fixed<int, xt::xshape<1>> left  = {-1};
     const xt::xtensor_fixed<int, xt::xshape<1>> right = {1};
@@ -125,7 +122,7 @@ int main(int argc, char* argv[])
 
     auto unp1 = samurai::make_vector_field<double, 2 + dim>("euler", mesh);
 
-    double dx            = mesh.cell_length(max_level);
+    double dx            = mesh.cell_length(config.max_level());
     const double dt_save = Tf / static_cast<double>(nfiles);
     std::size_t nsave    = 1;
     std::size_t nt       = 0;

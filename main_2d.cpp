@@ -19,7 +19,15 @@
 #include "euler/variables.hpp"
 
 template <class Field>
-void init_sol(Field& u, int jump, auto& mra_config, const std::string& test_case_name)
+void init_bc(Field& u, double& t, const std::string& test_case_name)
+{
+    auto& registry  = test_case::TestCaseRegistry<Field>::instance();
+    auto& test_case = registry.get(test_case_name);
+    test_case.bc(u, t);
+}
+
+template <class Field>
+void init_sol(Field& u, auto& config, int jump, auto& mra_config, const std::string& test_case_name)
 {
     static constexpr std::size_t dim = Field::dim;
     using mesh_t                     = typename Field::mesh_t;
@@ -36,6 +44,7 @@ void init_sol(Field& u, int jump, auto& mra_config, const std::string& test_case
                                test_case.init(u, cell);
                            });
 
+    std::cout << "Refining to level " << mesh.max_level() << std::endl;
     auto MRadaptation = samurai::make_MRAdapt(u);
     MRadaptation(mra_config);
 
@@ -49,12 +58,16 @@ void init_sol(Field& u, int jump, auto& mra_config, const std::string& test_case
                                   [&](const auto& stencil)
                                   {
                                       auto new_index = 2 * index + stencil;
-                                      cl[level + 1][new_index].add_interval(i << 1);
+                                      for (auto ii = i.start; ii < i.end; ++ii)
+                                      {
+                                          cl[level + 1][new_index].add_interval(i << 1);
+                                      }
                                   });
                           });
-        mesh.max_level() += 1;
-        mesh = {cl, mesh};
+        config.max_level()++;
+        mesh = {cl, config};
 
+        std::cout << "Refining to level " << mesh.max_level() << std::endl;
         u.resize();
         samurai::for_each_cell(mesh,
                                [&](auto& cell)
@@ -67,14 +80,6 @@ void init_sol(Field& u, int jump, auto& mra_config, const std::string& test_case
 }
 
 template <class Field>
-void init_bc(Field& u, double& t, const std::string& test_case_name)
-{
-    auto& registry  = test_case::TestCaseRegistry<Field>::instance();
-    auto& test_case = registry.get(test_case_name);
-    test_case.bc(u, t);
-}
-
-template <class Field>
 auto init_box(const std::string& test_case_name)
 {
     auto& registry  = test_case::TestCaseRegistry<Field>::instance();
@@ -84,17 +89,12 @@ auto init_box(const std::string& test_case_name)
 
 int main(int argc, char* argv[])
 {
-    constexpr std::size_t dim           = 2;
-    constexpr std::size_t default_level = 8;
+    constexpr std::size_t dim = 2;
+    std::size_t default_level = 8;
 
-    using mesh_t  = config<dim>::mesh_t;
     using field_t = config<dim>::field_t;
 
     auto& app = samurai::initialize("Double mach reflection", argc, argv);
-
-    // Multiresolution parameters
-    std::size_t min_level = 8;
-    std::size_t max_level = 8;
 
     double Tf  = .25;
     double cfl = 0.9;
@@ -102,6 +102,8 @@ int main(int argc, char* argv[])
     std::string restart_file;
     std::string scheme    = "hllc";
     std::string test_case = "double_mach_reflection";
+
+    bool check_positivity = false;
 
     // Output parameters
     fs::path path      = fs::current_path();
@@ -118,8 +120,8 @@ int main(int argc, char* argv[])
         ->group("Simulation parameters");
     app.add_option("--test-case", test_case, "Test case")->capture_default_str()->check(CLI::IsMember(available))->group("Simulation parameters");
     app.add_option("--restart-file", restart_file, "Restart file")->capture_default_str()->group("Simulation parameters");
-    app.add_option("--min-level", min_level, "Minimum level of the multiresolution")->capture_default_str()->group("Multiresolution");
-    app.add_option("--max-level", max_level, "Maximum level of the multiresolution")->capture_default_str()->group("Multiresolution");
+    app.add_flag("--check-positivity", check_positivity, "Check positivity of density and pressure at each iteration")
+        ->group("Simulation parameters");
     app.add_option("--path", path, "Output path")->capture_default_str()->group("Output");
     app.add_option("--nfiles", nfiles, "Number of output files")->capture_default_str()->group("Output");
 
@@ -130,27 +132,38 @@ int main(int argc, char* argv[])
     // Initialize the mesh
     auto box = init_box<field_t>(test_case);
 
-    mesh_t mesh;
-    auto u = samurai::make_vector_field<double, 2 + dim>("euler", mesh);
+    auto config = samurai::mesh_config<dim>().min_level(8).max_level(8).max_stencil_size(2).disable_minimal_ghost_width();
+    config.parse_args();
+    config.disable_args_parse();
 
-    auto MRadaptation = samurai::make_MRAdapt(u);
+    auto mesh = samurai::mra::make_empty_mesh(config);
+    auto u    = samurai::make_vector_field<double, 2 + dim>("euler", mesh);
+
+    auto prediction_fn = [](auto& new_field, const auto& old_field)
+    {
+        return make_field_operator_function<Euler_prediction_op>(new_field, old_field);
+    };
+
+    auto MRadaptation = samurai::make_MRAdapt(prediction_fn, u);
     auto mra_config   = samurai::mra_config().relative_detail(true);
 
     if (restart_file.empty())
     {
-        int jump = 0;
-        std::cout << "jump: " << jump << std::endl;
-        if (min_level == max_level)
+        int jump      = 0;
+        default_level = std::max(config.min_level(), default_level);
+        if (config.min_level() != config.max_level())
         {
-            mesh = {box, min_level, max_level};
+            jump = static_cast<int>(config.max_level() - default_level);
+            if (jump > 0)
+            {
+                config.max_level() = default_level;
+            }
         }
-        else
-        {
-            mesh = {box, min_level, std::min(default_level, max_level)};
-            jump = static_cast<int>(max_level - default_level);
-        }
-        std::cout << "jump: " << jump << std::endl;
-        init_sol(u, jump, mra_config, test_case);
+
+        std::cout << "jump = " << jump << " min-level = " << config.min_level() << " max-level = " << config.max_level() << std::endl;
+        mesh = samurai::mra::make_mesh(box, config);
+        init_sol(u, config, jump, mra_config, test_case);
+        std::cout << "Mesh initialized with " << mesh.nb_cells() << " cells." << std::endl;
     }
     else
     {
@@ -160,7 +173,7 @@ int main(int argc, char* argv[])
 
     auto unp1 = samurai::make_vector_field<double, 2 + dim>("euler", mesh);
 
-    double dx            = mesh.cell_length(max_level);
+    double dx            = mesh.cell_length(config.max_level());
     const double dt_save = Tf / static_cast<double>(nfiles);
     std::size_t nsave    = 0;
     std::size_t nt       = 0;
@@ -173,6 +186,11 @@ int main(int argc, char* argv[])
     while (t != Tf)
     {
         MRadaptation(mra_config);
+
+        if (check_positivity)
+        {
+            check(u);
+        }
 
         double dt = cfl * dx / get_max_lambda(u);
         t += dt;

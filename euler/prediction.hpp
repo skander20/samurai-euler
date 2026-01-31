@@ -48,7 +48,7 @@ class Euler_prediction_op : public samurai::field_operator_base<dim, TInterval>
         using EulerConsVar = EulerLayout<dim>;
         using field_t      = std::decay_t<decltype(src)>;
 
-        constexpr std::size_t pred_order = field_t::mesh_t::config::prediction_order;
+        constexpr std::size_t pred_order = field_t::mesh_t::config::prediction_stencil_radius;
 
         //
         // Step 1/4 — Compute dest values using the default prediction of order pred_order
