@@ -13,8 +13,11 @@
 namespace test_case::sod
 {
     double theta = std::numbers::pi / 4.;
-    double x0    = 0.5;
-    double y0    = 0.5;
+    
+    double Rdx = std::sin(theta) ;
+    double Rdy = std::cos(theta) ;
+    double k  = 0.5 / Rdy ; 
+    double x0 = 0.5 + k * Rdx ; //0.5 - 0.5*Rdx/Rdy
 
     PrimState<2> left_state{
         1.,
@@ -32,10 +35,9 @@ namespace test_case::sod
     {
         auto x = cell.center();
 
-        const double x_theta = std::tan(theta) * (x[0] - x0);
-        const double y_theta = x[1] - y0;
+        const double y_theta = (x0-x[0]) * Rdy/Rdx;
 
-        if (x_theta < y_theta)
+        if (x[1] < y_theta)
         {
             u[cell] = prim2cons<2>(left_state);
         }
