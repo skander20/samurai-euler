@@ -14,6 +14,7 @@
 #include "euler/config.hpp"
 #include "euler/init/cases.hpp"
 #include "euler/prediction.hpp"
+#include "euler/save.hpp"
 #include "euler/schemes.hpp"
 #include "euler/utils.hpp"
 #include "euler/variables.hpp"
@@ -90,7 +91,7 @@ auto init_box(const std::string& test_case_name)
 int main(int argc, char* argv[])
 {
     constexpr std::size_t dim = 2;
-    std::size_t default_level = 8;
+    std::size_t default_level = 10;
 
     using field_t = config<dim>::field_t;
 
@@ -178,7 +179,7 @@ int main(int argc, char* argv[])
     std::size_t nsave    = 0;
     std::size_t nt       = 0;
 
-    samurai::save("results", fmt::format("{}_{}_init", filename, scheme), mesh, u);
+    save("results", fmt::format("{}_{}_init", filename, scheme), u);
 
     std::cout << "Using scheme: " << scheme << std::endl;
     auto fv_scheme = get_fv_scheme<decltype(u)>(scheme);
@@ -216,7 +217,7 @@ int main(int argc, char* argv[])
         if (t >= static_cast<double>(nsave + 1) * dt_save || t == Tf)
         {
             const std::string suffix = (nfiles != 1) ? fmt::format("_ite_{}", nsave++) : "";
-            samurai::save("results", fmt::format("{}_{}{}", filename, scheme, suffix), mesh, u);
+            save("results", fmt::format("{}_{}{}", filename, scheme, suffix), u);
         }
     }
 
