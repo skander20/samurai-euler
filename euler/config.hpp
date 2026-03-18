@@ -7,7 +7,7 @@ template <std::size_t Dim>
 struct config
 {
     static constexpr std::size_t dim = Dim;
-    using Config                     = samurai::complete_mesh_config<samurai::mesh_config<dim>, samurai::MRMeshId>;
+    using Config                     = samurai::mesh_config<dim>;
     using mesh_t                     = samurai::MRMesh<Config>;
     using field_t                    = samurai::VectorField<mesh_t, double, dim + 2>;
 };
